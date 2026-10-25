@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>지출 정리기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e3e1dc;--acc:#2f6fed;--acc-soft:#e8efff}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#f2f2f3;--sub:#a0a0a8;--line:#333338;--acc:#6b9bff;--acc-soft:#1f2a44}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:24px;margin:0 0 4px} h2{font-size:17px;margin:0 0 12px}
+.lead{color:var(--sub);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:34px 16px;text-align:center;cursor:pointer;color:var(--sub)}
+#drop.over{border-color:var(--acc);background:var(--acc-soft)} #drop b{color:var(--ink)}
+textarea{width:100%;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:13px/1.6 ui-monospace,Consolas,monospace}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--sub);font-weight:600}
+tr.total td{font-weight:700}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+.note{font-size:13px;color:var(--sub)} .hidden{display:none} .scroll{overflow-x:auto}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+</style>
+</head>
+<body>
+<main>
+  <h1>지출 정리기</h1>
+  <p class="lead">카드·통장 내역 엑셀을 올리면 가맹점 이름으로 항목을 나누고, 월별·항목별 합계표를 만듭니다.</p>
+  <div class="card">
+    <div id="drop"><b>카드·통장 내역 파일을 끌어 놓거나 눌러서 고르세요</b><br>xlsx · xls · csv 지원 · 파일은 이 컴퓨터 밖으로 나가지 않습니다</div>
+    <input id="file" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+    <p id="fileinfo" class="note"></p>
+  </div>
+  <div class="card">
+    <h2>분류 규칙 <span class="note">한 줄에 '항목: 단어, 단어' — 고치면 바로 다시 계산합니다</span></h2>
+    <textarea id="rules">식비: 배달의민족, 쿠팡이츠, 요기요, 김밥, 식당, 분식, 치킨
+카페: 스타벅스, 이디야, 투썸, 메가커피, 커피, 카페
+교통: 카카오T, 택시, 코레일, 지하철, 버스, 주유
+쇼핑: 쿠팡, 네이버페이, 다이소, 올리브영, 마켓
+편의점: GS25, CU, 세븐일레븐, 이마트24
+공과금·통신: 한국전력, 도시가스, 수도, SK텔레콤, KT, LG유플러스</textarea>
+  </div>
+  <div id="result" class="hidden">
+    <div class="card">
+      <div class="row"><h2>월별 · 항목별 합계</h2><button id="dl">정리본 엑셀 받기</button></div>
+      <div class="scroll"><table id="pivot"></table></div>
+      <p id="unk" class="note"></p>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const won = n => Math.round(n).toLocaleString('ko-KR');
+const num = v => typeof v === 'number' ? v : (parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')) || 0);
+let header = [], rows = [], out = null;
+
+const pick = (re) => header.findIndex(h => re.test(String(h)));
+function month(v) {
+  if (v instanceof Date) return v.toISOString().slice(0, 7);
+  if (typeof v === 'number' && v > 20000 && v < 80000) { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${String(d.m).padStart(2, '0')}`; }
+  const m = String(v ?? '').match(/(\d{4})[.\-\/년\s]*(\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, '0')}` : '날짜 없음';
+}
+function rules() {
+  return $('rules').value.split('\n').map(l => l.split(':')).filter(p => p.length > 1)
+    .map(([k, v]) => [k.trim(), v.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)]);
+}
+function load(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+    let h = aoa.findIndex(r => r.some(c => /가맹점|사용처|적요|내용/.test(String(c))));
+    if (h < 0) h = 0;
+    header = aoa[h].map(String); rows = aoa.slice(h + 1).filter(r => r.some(c => String(c).trim()));
+    $('fileinfo').textContent = `${file.name} · ${rows.length.toLocaleString()}건을 읽었습니다.`;
+    calc();
+  };
+  r.readAsArrayBuffer(file);
+}
+function calc() {
+  if (!rows.length) return;
+  const cD = Math.max(0, pick(/이용일|거래일|사용일|날짜|일자|일시/)), cS = Math.max(0, pick(/가맹점|사용처|적요|내용|거래처/)), cA = Math.max(0, pick(/이용금액|사용금액|출금|금액/));
+  const R = rules(), table = new Map(), months = new Set(), unknown = new Map(), detail = [];
+  for (const r of rows) {
+    const shop = String(r[cS]), low = shop.toLowerCase(), amt = num(r[cA]), m = month(r[cD]);
+    const cat = (R.find(([, ws]) => ws.some(w => low.includes(w))) || ['기타'])[0];
+    if (cat === '기타') unknown.set(shop, (unknown.get(shop) || 0) + amt);
+    months.add(m); const row = table.get(cat) || {}; row[m] = (row[m] || 0) + amt; table.set(cat, row);
+    detail.push([r[cD] instanceof Date ? r[cD].toISOString().slice(0, 10) : r[cD], shop, amt, cat]);
+  }
+  const ms = [...months].sort(), cats = [...table.keys()].sort((a, b) => (a === '기타') - (b === '기타') || sum(table.get(b)) - sum(table.get(a)));
+  function sum(o) { return Object.values(o).reduce((a, b) => a + b, 0); }
+  const tot = ms.map(m => cats.reduce((a, c) => a + (table.get(c)[m] || 0), 0));
+  $('pivot').innerHTML = `<tr><th>항목</th>${ms.map(m => `<th>${m}</th>`).join('')}<th>합계</th></tr>` +
+    cats.map(c => `<tr><td>${c}</td>${ms.map(m => `<td>${won(table.get(c)[m] || 0)}</td>`).join('')}<td>${won(sum(table.get(c)))}</td></tr>`).join('') +
+    `<tr class="total"><td>합계</td>${tot.map(t => `<td>${won(t)}</td>`).join('')}<td>${won(tot.reduce((a, b) => a + b, 0))}</td></tr>`;
+  $('unk').textContent = unknown.size ? `'기타'로 분류된 가맹점: ${[...unknown.keys()].slice(0, 12).join(', ')}${unknown.size > 12 ? ' 외' : ''} — 규칙에 단어를 추가하면 옮겨집니다.` : '모든 내역이 항목에 들어갔습니다.';
+  $('result').classList.remove('hidden');
+  out = { ms, cats, table, tot, detail, sum };
+}
+$('dl').onclick = () => {
+  if (!out) return;
+  const { ms, cats, table, tot, detail, sum } = out, wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['항목', ...ms, '합계'],
+    ...cats.map(c => [c, ...ms.map(m => table.get(c)[m] || 0), sum(table.get(c))]), ['합계', ...tot, tot.reduce((a, b) => a + b, 0)]]), '월별항목별');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['날짜', '가맹점', '금액', '항목'], ...detail]), '분류된내역');
+  XLSX.writeFile(wb, `지출정리_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+$('rules').addEventListener('input', calc);
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && load(e.dataTransfer.files[0]); };
+</script>
+</body>
+</html>

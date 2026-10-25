@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>엑셀 업무 자동화</title>
+<meta name="description" content="매일 반복하는 엑셀 정리를 버튼 한 번으로. 설치 없이 브라우저에서 바로 쓰는 맞춤 업무 도구를 만들어 드립니다.">
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e3e1dc;--acc:#2f6fed;--acc-soft:#e8efff}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#f2f2f3;--sub:#a0a0a8;--line:#333338;--acc:#6b9bff;--acc-soft:#1f2a44}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;word-break:keep-all}
+main{max-width:960px;margin:0 auto;padding:48px 16px 72px}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.25;margin:0 0 12px;letter-spacing:-.02em}
+h2{font-size:22px;margin:56px 0 16px}
+.lead{font-size:18px;color:var(--sub);margin:0 0 24px;max-width:640px}
+.pill{display:inline-block;background:var(--acc-soft);color:var(--acc);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+.card h3{margin:0 0 6px;font-size:18px}
+.card p{margin:0 0 14px;color:var(--sub);font-size:15px}
+.before{font-size:14px;margin:0 0 14px}
+.before b{color:var(--ink)}
+a.btn{display:inline-block;background:var(--acc);color:#fff;text-decoration:none;border-radius:8px;padding:9px 14px;font-weight:600;font-size:15px}
+a.sub{color:var(--acc);font-size:14px;margin-left:10px}
+.price{font-size:26px;font-weight:700;margin:4px 0 10px}
+.card ul{margin:0;padding-left:18px;color:var(--sub);font-size:15px}
+.feat{border:2px solid var(--acc)}
+ol.steps{padding-left:20px} ol.steps li{margin-bottom:8px}
+.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.why div b{display:block;margin-bottom:4px}
+.why div{color:var(--sub);font-size:15px}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:600}
+details p{color:var(--sub);margin:10px 0 0}
+footer{margin-top:56px;color:var(--sub);font-size:14px;border-top:1px solid var(--line);padding-top:20px}
+</style>
+</head>
+<body>
+<main>
+  <span class="pill">엑셀 업무 자동화</span>
+  <h1>매일 30분 걸리던 엑셀 정리,<br>버튼 한 번으로 끝내 드립니다.</h1>
+  <p class="lead">주문 정산, 파일 합치기, 지출 정리처럼 매번 손으로 하던 일을 그 회사 양식에 꼭 맞는 작은 도구로 만들어 드립니다. 설치가 필요 없고, 파일은 내 컴퓨터 밖으로 나가지 않습니다.</p>
+  <a class="btn" href="#demo">직접 써 보기</a>
+
+  <h2 id="demo">지금 바로 써 볼 수 있는 시연 도구</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>주문 정산기</h3>
+      <p>쇼핑몰 주문 엑셀을 올리면 상품별·날짜별 매출과 수수료를 뺀 순매출을 정리합니다.</p>
+      <p class="before"><b>전:</b> 주문 240건을 필터·피벗으로 30분 &nbsp;→&nbsp; <b>후:</b> 파일 올리고 5초</p>
+      <a class="btn" href="tools/주문정산기.html">써 보기</a><a class="sub" href="samples/주문내역_9월.csv" download>샘플 파일</a>
+    </div>
+    <div class="card">
+      <h3>엑셀 합치기</h3>
+      <p>지점별·월별로 흩어진 파일 여러 개를 하나로 합치고, 겹치는 사람·주문은 하나만 남깁니다.</p>
+      <p class="before"><b>전:</b> 복사·붙여넣기 후 눈으로 중복 찾기 &nbsp;→&nbsp; <b>후:</b> 한꺼번에 끌어 놓기</p>
+      <a class="btn" href="tools/엑셀합치기.html">써 보기</a><a class="sub" href="samples/고객명단_강남점.csv" download>샘플 1</a><a class="sub" href="samples/고객명단_홍대점.csv" download>샘플 2</a>
+    </div>
+    <div class="card">
+      <h3>지출 정리기</h3>
+      <p>카드·통장 내역을 가맹점 이름으로 항목을 나누고 월별 합계표를 만듭니다. 규칙은 직접 고칠 수 있습니다.</p>
+      <p class="before"><b>전:</b> 한 줄씩 항목 적기 &nbsp;→&nbsp; <b>후:</b> 자동 분류 + 엑셀 저장</p>
+      <a class="btn" href="tools/지출정리기.html">써 보기</a><a class="sub" href="samples/카드내역_7-9월.csv" download>샘플 파일</a>
+    </div>
+  </div>
+
+  <h2>이런 점이 다릅니다</h2>
+  <div class="why">
+    <div><b>설치 없음</b>파일 하나를 열면 브라우저에서 바로 돌아갑니다. 회사 PC에 프로그램을 깔 필요가 없습니다.</div>
+    <div><b>자료가 밖으로 안 나감</b>계산은 모두 사용하는 컴퓨터 안에서 합니다. 고객 명단·매출 자료를 서버에 올리지 않습니다.</div>
+    <div><b>그 회사 양식 그대로</b>지금 쓰는 엑셀 양식을 바꾸지 않아도 됩니다. 도구를 양식에 맞춥니다.</div>
+    <div><b>양식이 바뀌어도</b>쇼핑몰 양식이 바뀌면 고쳐 드립니다. 월 관리를 신청하면 따로 비용이 없습니다.</div>
+  </div>
+
+  <h2>가격</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>맞춤 설정</h3>
+      <div class="price">50,000원</div>
+      <ul><li>위 시연 도구 중 하나를 내 양식에 맞게 조정</li><li>작업 1일 · 수정 1회</li></ul>
+    </div>
+    <div class="card feat">
+      <h3>업무 1개 자동화</h3>
+      <div class="price">150,000원</div>
+      <ul><li>반복 업무 하나를 새 도구로 제작</li><li>엑셀 입력 → 정리된 결과 엑셀</li><li>작업 3일 · 수정 2회</li></ul>
+    </div>
+    <div class="card">
+      <h3>업무 흐름 자동화</h3>
+      <div class="price">350,000원~</div>
+      <ul><li>여러 단계·여러 파일이 얽힌 업무</li><li>사람은 마지막 확인만 하도록 설계</li><li>작업 7일 · 수정 3회</li></ul>
+    </div>
+  </div>
+  <p style="color:var(--sub);font-size:15px">월 관리 30,000원: 양식 변경 대응, 작은 기능 추가, 문의 응답.</p>
+
+  <h2>진행 방식</h2>
+  <ol class="steps">
+    <li><b>상담</b> — 지금 하는 일을 순서대로 알려 주세요. 개인정보를 지운 예시 파일 1개면 충분합니다.</li>
+    <li><b>견적</b> — 자동화할 범위와 작업 기간, 가격을 먼저 확정합니다.</li>
+    <li><b>시안</b> — 예시 파일로 돌아가는 첫 버전을 보내 드립니다.</li>
+    <li><b>수정·완성</b> — 실제로 써 보시고 고칠 점을 말씀해 주세요.</li>
+    <li><b>사용 안내</b> — 쓰는 방법을 한 장으로 정리해 드립니다.</li>
+  </ol>
+
+  <h2>자주 묻는 질문</h2>
+  <details><summary>엑셀을 잘 몰라도 쓸 수 있나요?</summary><p>파일을 끌어 놓고 버튼만 누르면 됩니다. 수식이나 매크로를 다룰 필요가 없습니다.</p></details>
+  <details><summary>매크로(VBA) 파일로 받을 수도 있나요?</summary><p>회사 환경상 엑셀 안에서 돌아가야 한다면 상담 때 말씀해 주세요. 맞는 방식으로 제안해 드립니다.</p></details>
+  <details><summary>우리 회사 자료를 보내야 하나요?</summary><p>이름·연락처 같은 개인정보는 지우고, 열 구성만 같은 예시 파일을 보내 주시면 됩니다.</p></details>
+  <details><summary>쇼핑몰마다 양식이 다른데요?</summary><p>열 이름을 자동으로 찾고, 못 찾으면 직접 고를 수 있게 만듭니다. 여러 쇼핑몰을 한 번에 합치는 것도 가능합니다.</p></details>
+
+  <footer>시연 도구의 데이터는 모두 연습용으로 만든 가짜 자료입니다. 문의는 판매 페이지의 메시지로 받습니다.</footer>
+</main>
+</body>
+</html>

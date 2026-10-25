@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주문 정산기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e3e1dc;--acc:#2f6fed;--acc-soft:#e8efff;--bad:#c2410c}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#f2f2f3;--sub:#a0a0a8;--line:#333338;--acc:#6b9bff;--acc-soft:#1f2a44;--bad:#fb923c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:24px;margin:0 0 4px}
+.lead{color:var(--sub);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:34px 16px;text-align:center;cursor:pointer;color:var(--sub)}
+#drop.over{border-color:var(--acc);background:var(--acc-soft)}
+#drop b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px}
+select,input[type=number]{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi span{display:block;font-size:13px;color:var(--sub)}
+.kpi b{font-size:22px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{color:var(--sub);font-weight:600}
+.bar{height:8px;background:var(--acc);border-radius:4px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.note{font-size:13px;color:var(--sub)}
+.warn{color:var(--bad)}
+.hidden{display:none}
+.scroll{overflow-x:auto}
+h2{font-size:17px;margin:0 0 12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>주문 정산기</h1>
+  <p class="lead">쇼핑몰에서 내려받은 주문 엑셀을 올리면 상품별·날짜별 매출과 수수료를 뺀 순매출을 바로 정리합니다.</p>
+
+  <div class="card">
+    <div id="drop"><b>주문 파일을 여기에 끌어 놓거나 눌러서 고르세요</b><br>xlsx · xls · csv 지원 · 파일은 이 컴퓨터 밖으로 나가지 않습니다</div>
+    <input id="file" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+    <p id="fileinfo" class="note"></p>
+  </div>
+
+  <div id="setup" class="card hidden">
+    <h2>열 맞추기 <span class="note">자동으로 골랐어요. 틀리면 바꿔 주세요.</span></h2>
+    <div class="grid">
+      <div><label>주문 날짜</label><select id="c_date"></select></div>
+      <div><label>상품명</label><select id="c_name"></select></div>
+      <div><label>수량</label><select id="c_qty"></select></div>
+      <div><label>결제 금액</label><select id="c_amt"></select></div>
+      <div><label>주문 상태</label><select id="c_status"></select></div>
+      <div><label>판매 수수료(%)</label><input id="fee" type="number" min="0" max="100" step="0.1" value="5.5"></div>
+    </div>
+    <p class="note" style="margin-top:12px">'취소', '반품', '환불'이 들어간 상태는 매출에서 빼고 따로 셉니다.</p>
+  </div>
+
+  <div id="result" class="hidden">
+    <div class="kpis" id="kpis"></div>
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between"><h2>상품별 매출</h2><button id="dl">정리본 엑셀 받기</button></div>
+      <div class="scroll"><table id="byItem"></table></div>
+    </div>
+    <div class="card">
+      <h2>날짜별 매출</h2>
+      <div class="scroll"><table id="byDay"></table></div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+const num = v => { if (typeof v === 'number') return v; const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; };
+const GUESS = {
+  c_date: ['주문일시', '주문일', '결제일', '날짜', '일자', 'date'],
+  c_name: ['상품명', '품목', '제품명', '상품', 'item', 'product'],
+  c_qty: ['수량', '개수', 'qty', 'quantity'],
+  c_amt: ['총 주문금액', '주문금액', '결제금액', '판매금액', '금액', '매출', 'amount', 'price'],
+  c_status: ['주문상태', '상태', '처리상태', 'status']
+};
+const CANCEL = /취소|반품|환불|cancel|refund/i;
+let header = [], rows = [], lastOut = null;
+
+function toDay(v) {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number' && v > 20000 && v < 80000) { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`; }
+  const m = String(v ?? '').match(/(\d{4})[.\-\/년\s]*(\d{1,2})[.\-\/월\s]*(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '날짜 없음';
+}
+
+function findHeader(aoa) {
+  const keys = Object.values(GUESS).flat();
+  for (let i = 0; i < Math.min(aoa.length, 15); i++) {
+    const hits = aoa[i].filter(c => keys.some(k => String(c).toLowerCase().includes(k.toLowerCase()))).length;
+    if (hits >= 2) return i;
+  }
+  return 0;
+}
+
+function guess(id) {
+  for (const k of GUESS[id]) { const i = header.findIndex(h => String(h).replace(/\s/g, '').toLowerCase().includes(k.replace(/\s/g, '').toLowerCase())); if (i >= 0) return i; }
+  return -1;
+}
+
+function load(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+      const h = findHeader(aoa);
+      header = aoa[h].map(String);
+      rows = aoa.slice(h + 1).filter(r => r.some(c => String(c).trim() !== ''));
+      $('fileinfo').textContent = `${file.name} · ${rows.length.toLocaleString()}행을 읽었습니다.`;
+      for (const id of Object.keys(GUESS)) {
+        const sel = $(id), g = guess(id);
+        sel.innerHTML = (id === 'c_status' || id === 'c_qty' ? '<option value="-1">(없음)</option>' : '') + header.map((x, i) => `<option value="${i}">${x || '열 ' + (i + 1)}</option>`).join('');
+        sel.value = String(g >= 0 ? g : (id === 'c_status' || id === 'c_qty' ? -1 : 0));
+      }
+      $('setup').classList.remove('hidden');
+      calc();
+    } catch (err) {
+      $('fileinfo').innerHTML = `<span class="warn">파일을 읽지 못했습니다: ${err.message}</span>`;
+    }
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function calc() {
+  const c = id => parseInt($(id).value, 10);
+  const [cd, cn, cq, ca, cs] = ['c_date', 'c_name', 'c_qty', 'c_amt', 'c_status'].map(c);
+  const fee = Math.max(0, num($('fee').value)) / 100;
+  const items = new Map(), days = new Map(), ok = [];
+  let orders = 0, qty = 0, sales = 0, canceled = 0, canceledAmt = 0;
+  for (const r of rows) {
+    const amt = num(r[ca]), q = cq >= 0 ? num(r[cq]) || 1 : 1;
+    if (cs >= 0 && CANCEL.test(String(r[cs]))) { canceled++; canceledAmt += amt; continue; }
+    orders++; qty += q; sales += amt; ok.push(r);
+    const name = String(r[cn] || '(이름 없음)').trim();
+    const it = items.get(name) || { q: 0, amt: 0, n: 0 }; it.q += q; it.amt += amt; it.n++; items.set(name, it);
+    const d = toDay(r[cd]); const dy = days.get(d) || { n: 0, amt: 0 }; dy.n++; dy.amt += amt; days.set(d, dy);
+  }
+  const itemList = [...items].sort((a, b) => b[1].amt - a[1].amt);
+  const dayList = [...days].sort((a, b) => a[0].localeCompare(b[0]));
+  const top = itemList.length ? itemList[0][1].amt : 1, topDay = Math.max(1, ...dayList.map(d => d[1].amt));
+  $('kpis').innerHTML = [
+    ['정상 주문', orders.toLocaleString() + '건'], ['판매 수량', qty.toLocaleString() + '개'],
+    ['매출', won(sales)], [`순매출 (수수료 ${(fee * 100).toFixed(1)}% 차감)`, won(sales * (1 - fee))],
+    ['취소·반품', `${canceled}건 · ${won(canceledAmt)}`]
+  ].map(([k, v]) => `<div class="kpi"><span>${k}</span><b>${v}</b></div>`).join('');
+  $('byItem').innerHTML = '<tr><th>상품</th><th>주문</th><th>수량</th><th>매출</th><th>비중</th><th style="width:22%"></th></tr>' +
+    itemList.map(([n, v]) => `<tr><td>${n}</td><td>${v.n}</td><td>${v.q}</td><td>${won(v.amt)}</td><td>${sales ? (v.amt / sales * 100).toFixed(1) : 0}%</td><td><div class="bar" style="width:${v.amt / top * 100}%"></div></td></tr>`).join('');
+  $('byDay').innerHTML = '<tr><th>날짜</th><th>주문</th><th>매출</th><th style="width:40%"></th></tr>' +
+    dayList.map(([d, v]) => `<tr><td>${d}</td><td>${v.n}</td><td>${won(v.amt)}</td><td><div class="bar" style="width:${v.amt / topDay * 100}%"></div></td></tr>`).join('');
+  $('result').classList.remove('hidden');
+  lastOut = { itemList, dayList, ok, sales, fee, orders, qty, canceled, canceledAmt };
+}
+
+$('dl').onclick = () => {
+  if (!lastOut) return;
+  const o = lastOut, wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['항목', '값'], ['정상 주문(건)', o.orders], ['판매 수량(개)', o.qty], ['매출(원)', o.sales],
+    ['판매 수수료(%)', +(o.fee * 100).toFixed(2)], ['순매출(원)', Math.round(o.sales * (1 - o.fee))],
+    ['취소·반품(건)', o.canceled], ['취소·반품 금액(원)', o.canceledAmt]]), '요약');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['상품', '주문(건)', '수량(개)', '매출(원)', '비중(%)'],
+    ...o.itemList.map(([n, v]) => [n, v.n, v.q, v.amt, o.sales ? +(v.amt / o.sales * 100).toFixed(1) : 0])]), '상품별');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['날짜', '주문(건)', '매출(원)'], ...o.dayList.map(([d, v]) => [d, v.n, v.amt])]), '날짜별');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...o.ok]), '정상주문');
+  XLSX.writeFile(wb, `주문정산_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+['c_date', 'c_name', 'c_qty', 'c_amt', 'c_status', 'fee'].forEach(id => $(id).addEventListener('input', calc));
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && load(e.dataTransfer.files[0]); };
+</script>
+</body>
+</html>

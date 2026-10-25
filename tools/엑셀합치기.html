@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>엑셀 합치기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e3e1dc;--acc:#2f6fed;--acc-soft:#e8efff;--bad:#c2410c}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#f2f2f3;--sub:#a0a0a8;--line:#333338;--acc:#6b9bff;--acc-soft:#1f2a44;--bad:#fb923c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:24px;margin:0 0 4px} h2{font-size:17px;margin:0 0 12px}
+.lead{color:var(--sub);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:34px 16px;text-align:center;cursor:pointer;color:var(--sub)}
+#drop.over{border-color:var(--acc);background:var(--acc-soft)} #drop b{color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi span{display:block;font-size:13px;color:var(--sub)} .kpi b{font-size:22px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--sub);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:14px}
+.chips input{margin-right:6px}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+.note{font-size:13px;color:var(--sub)} .hidden{display:none} .scroll{overflow-x:auto}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+</style>
+</head>
+<body>
+<main>
+  <h1>엑셀 합치기</h1>
+  <p class="lead">지점별·월별로 흩어진 엑셀 여러 개를 한 파일로 합치고, 겹치는 행은 하나만 남깁니다.</p>
+  <div class="card">
+    <div id="drop"><b>파일 여러 개를 한꺼번에 끌어 놓거나 눌러서 고르세요</b><br>xlsx · xls · csv 지원 · 파일은 이 컴퓨터 밖으로 나가지 않습니다</div>
+    <input id="file" type="file" accept=".xlsx,.xls,.csv" multiple class="hidden">
+    <p id="fileinfo" class="note"></p>
+  </div>
+  <div id="setup" class="card hidden">
+    <h2>같은 사람·같은 건으로 볼 기준 <span class="note">고른 열이 모두 같으면 중복으로 봅니다</span></h2>
+    <div class="chips" id="keys"></div>
+    <p class="note" style="margin-top:10px">중복이면 가장 최근 파일의 행을 남기고, 어느 파일에서 왔는지 '출처' 열에 적습니다.</p>
+  </div>
+  <div id="result" class="hidden">
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <div class="row"><h2>합친 결과 미리보기 <span class="note">(앞 30행)</span></h2><button id="dl">합친 엑셀 받기</button></div>
+      <div class="scroll"><table id="preview"></table></div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let header = [], data = [], files = 0, merged = [];
+const norm = v => String(v ?? '').replace(/[\s\-()]/g, '').toLowerCase();
+
+async function loadAll(list) {
+  header = []; data = []; files = list.length;
+  for (const f of list) {
+    const wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array', cellDates: true });
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false });
+    for (const r of json) { for (const k of Object.keys(r)) if (!header.includes(k)) header.push(k); data.push({ ...r, '출처': f.name }); }
+  }
+  $('fileinfo').textContent = `${files}개 파일 · 모두 ${data.length.toLocaleString()}행을 읽었습니다.`;
+  const pre = header.filter(h => /이름|성명|연락처|전화|휴대폰|이메일|주문번호|사업자/.test(h));
+  $('keys').innerHTML = header.map(h => `<label><input type="checkbox" value="${h}" ${pre.includes(h) ? 'checked' : ''}>${h}</label>`).join('');
+  $('keys').querySelectorAll('input').forEach(i => i.onchange = calc);
+  $('setup').classList.remove('hidden');
+  calc();
+}
+
+function calc() {
+  const keys = [...$('keys').querySelectorAll('input:checked')].map(i => i.value);
+  const seen = new Map();
+  data.forEach((r, i) => seen.set(keys.length ? keys.map(k => norm(r[k])).join('|') : i, r));
+  merged = [...seen.values()];
+  const cols = [...header, '출처'];
+  $('kpis').innerHTML = [['합친 파일', files + '개'], ['원래 행', data.length + '행'], ['중복 제거', (data.length - merged.length) + '행'], ['최종', merged.length + '행']]
+    .map(([k, v]) => `<div class="kpi"><span>${k}</span><b>${v}</b></div>`).join('');
+  $('preview').innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>' +
+    merged.slice(0, 30).map(r => '<tr>' + cols.map(c => `<td>${r[c] ?? ''}</td>`).join('') + '</tr>').join('');
+  $('result').classList.remove('hidden');
+}
+
+$('dl').onclick = () => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(merged, { header: [...header, '출처'] }), '합친결과');
+  XLSX.writeFile(wb, `합친결과_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => e.target.files.length && loadAll([...e.target.files]);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files.length && loadAll([...e.dataTransfer.files]); };
+</script>
+</body>
+</html>
